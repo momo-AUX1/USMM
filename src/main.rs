@@ -43,9 +43,13 @@ struct ModEntry {
     title: String,
 }
 
-
-fn show_message_box(msg: String, window: &sdl2::video::Window){
-    _ = sdl2::messagebox::show_simple_message_box(sdl2::messagebox::MessageBoxFlag::INFORMATION, "Error", msg.as_str(), window);
+fn show_message_box(msg: String, window: &sdl2::video::Window) {
+    _ = sdl2::messagebox::show_simple_message_box(
+        sdl2::messagebox::MessageBoxFlag::INFORMATION,
+        "Error",
+        msg.as_str(),
+        window,
+    );
 }
 
 fn main() {
@@ -75,7 +79,6 @@ fn main() {
         a.set_context_profile(sdl2::video::GLProfile::Core);
         a.set_context_version(4, 1);
     }
-
 
     let window = video
         .window("USMM", 1280, 720)
@@ -137,12 +140,18 @@ fn main() {
                                 let ini_content = match ini_content {
                                     Ok(content) => content,
                                     Err(e) => {
-                                        show_message_box(format!("Error opening INI file: {}", e), &window);
+                                        show_message_box(
+                                            format!("Error opening INI file: {}", e),
+                                            &window,
+                                        );
                                         return;
                                     }
                                 };
                                 if let Err(e) = cfg.read(ini_content) {
-                                    show_message_box(format!("Error opening INI file: {}", e), &window);
+                                    show_message_box(
+                                        format!("Error opening INI file: {}", e),
+                                        &window,
+                                    );
                                     return;
                                 }
 
@@ -204,6 +213,9 @@ fn main() {
                         }
 
                         if ui.menu_item("Save") {
+                            if ini_path.is_none() {
+                                show_message_box("No INI loaded to save!".into(), &window);
+                            }
                             if let Some(ref path) = ini_path {
                                 if let Some(file) = cfg.get_map() {
                                     if let Some(main) = file.get("main") {
@@ -246,7 +258,10 @@ fn main() {
                                 }
                                 let cfg_write = cfg.write(path);
                                 if let Err(e) = cfg_write {
-                                    show_message_box(format!("Error saving INI file: {}", e), &window);
+                                    show_message_box(
+                                        format!("Error saving INI file: {}", e),
+                                        &window,
+                                    );
                                     return;
                                 }
                             }
