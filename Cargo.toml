@@ -17,7 +17,7 @@ zip = "4.0.0"
 uuid = { version = "1.17.0", features = ["v4"] }
 
 [features]
-default = ["gl_profile_es"]
+default = ["gl_profile_core"]
 gl_profile_es = []
 gl_profile_core = []
 xbox_build = []
