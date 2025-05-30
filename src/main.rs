@@ -311,7 +311,7 @@ fn main() {
                                         let mut buf = BufWriter::new(f);
                                         let map = cfg.get_map().unwrap();
 
-                                        for section in &["main", "mods", "codes"] {
+                                        for section in &["Main", "Mods", "Codes"] {
                                             if let Some(sec_map) = map.get(*section) {
                                                 writeln!(buf, "[{}]", section).unwrap();
                                                 for (k, v_opt) in sec_map {
