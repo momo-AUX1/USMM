@@ -1,8 +1,8 @@
 [package]
 name = "USMM"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2024"
-author = "Momo-AUX1"
+authors = ["Momo-AUX1"]
 
 [dependencies]
 imgui = "0.12.0"
@@ -13,9 +13,11 @@ configparser = "3.0.5"
 rfd = "0.15.3"
 toml = "0.7"
 chrono = "0.4.41"
+zip = "4.0.0"
+uuid = { version = "1.17.0", features = ["v4"] }
 
 [features]
-default = ["gl_profile_opengl"]
-gl_profile_gles = []
-gl_profile_opengl = []
-embed_dll = []
+default = ["gl_profile_es"]
+gl_profile_es = []
+gl_profile_core = []
+xbox_build = []

@@ -15,6 +15,10 @@ use sdl2::{event::Event, sys::exit as sdl_exit};
 use chrono::{Datelike, Utc};
 use toml::Value;
 
+use std::fs::File;
+use uuid::Uuid;
+use zip::ZipArchive;
+
 const CHEATS: &[&str] = &[
     "UseOfficialTitleOnTitleBar",
     "UseArrowsForTimeOfDayTransition",
@@ -52,6 +56,50 @@ fn show_message_box(msg: String, window: &sdl2::video::Window) {
     );
 }
 
+#[cfg(feature = "xbox_build")]
+fn ensure_cpkredir_ini() {
+    use std::fs;
+    use std::io::Write;
+    use std::path::Path;
+
+    let ini_path = Path::new("E:/Unleashed/cpkredir.ini");
+    if ini_path.exists() {
+        return;
+    }
+
+    if let Some(parent) = ini_path.parent() {
+        if !parent.exists() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                eprintln!("Failed to create directory {:?}: {}", parent, e);
+                return;
+            }
+        }
+    }
+
+    let content = r#"[CPKREDIR]
+Enabled=1
+PlaceTocAtEnd=1
+HandleCpksWithoutExtFiles=0
+LogFile="cpkredir.log"
+ReadBlockSizeKB=4096
+ModsDbIni="E:\Unleashed\mods\ModsDB.ini"
+EnableSaveFileRedirection=0
+SaveFileFallback=""
+SaveFileOverride=""
+LogType=""
+
+[HedgeModManager]
+EnableFallbackSaveRedirection=0
+ModProfile="Default"
+UseLauncher=1
+"#;
+
+    match fs::File::create(ini_path).and_then(|mut f| f.write_all(content.as_bytes())) {
+        Ok(_) => println!("Created default cpkredir.ini at {}", ini_path.display()),
+        Err(e) => eprintln!("Failed to create cpkredir.ini: {}", e),
+    }
+}
+
 fn main() {
     let mut ini_path: Option<String> = None;
     let mut cfg = Ini::new();
@@ -61,19 +109,19 @@ fn main() {
     let mut show_about = false;
 
     const RAW_TOML: &str = include_str!("../Cargo.toml");
-    let toml: toml::Value = toml::from_str(RAW_TOML).unwrap();
+    let toml: Value = toml::from_str(RAW_TOML).unwrap();
     let package = toml.get("package").unwrap();
 
     let sdl = sdl2::init().unwrap();
     let video = sdl.video().unwrap();
-    #[cfg(feature = "gl_profile_gles")]
+    #[cfg(feature = "gl_profile_es")]
     {
         let a = video.gl_attr();
         a.set_context_profile(sdl2::video::GLProfile::GLES);
         a.set_context_version(3, 0);
     }
 
-    #[cfg(feature = "gl_profile_opengl")]
+    #[cfg(feature = "gl_profile_core")]
     {
         let a = video.gl_attr();
         a.set_context_profile(sdl2::video::GLProfile::Core);
@@ -94,6 +142,7 @@ fn main() {
     let gl = unsafe { glow::Context::from_loader_function(|s| video.gl_get_proc_address(s) as _) };
     let mut ig = Context::create();
     ig.set_ini_filename(None);
+    ig.set_log_filename(None);
 
     let mut platform = SdlPlatform::new(&mut ig);
     let mut renderer = AutoRenderer::new(gl, &mut ig).unwrap();
@@ -212,7 +261,7 @@ fn main() {
                             }
                         }
 
-                        if ui.menu_item("Save") {
+                        if ini_path.is_some() && ui.menu_item("Save") {
                             if ini_path.is_none() {
                                 show_message_box("No INI loaded to save!".into(), &window);
                             }
@@ -266,6 +315,140 @@ fn main() {
                                 }
                             }
                         }
+
+                        if ini_path.is_some() && ui.menu_item("Import Zip") {
+                            if let Some(zip_path) = FileDialog::new()
+                                .add_filter("ZIP files", &["zip"])
+                                .pick_file()
+                            {
+                                let file = match File::open(&zip_path) {
+                                    Ok(f) => f,
+                                    Err(e) => {
+                                        show_message_box(
+                                            format!("Failed to open zip: {}", e),
+                                            &window,
+                                        );
+                                        return;
+                                    }
+                                };
+                                let mut archive = match ZipArchive::new(file) {
+                                    Ok(a) => a,
+                                    Err(e) => {
+                                        show_message_box(
+                                            format!("Failed to read zip: {}", e),
+                                            &window,
+                                        );
+                                        return;
+                                    }
+                                };
+
+                                #[cfg(feature = "xbox_build")]
+                                let extract_dir = Path::new("E:/Unleashed/mods")
+                                    .join(zip_path.file_stem().unwrap());
+                                #[cfg(not(feature = "xbox_build"))]
+                                let extract_dir = {
+                                    if let Some(dir) = FileDialog::new().pick_folder() {
+                                        dir.join(zip_path.file_stem().unwrap())
+                                    } else {
+                                        return;
+                                    }
+                                };
+
+                                if let Err(e) = fs::create_dir_all(&extract_dir) {
+                                    show_message_box(
+                                        format!("Failed to create dir: {}", e),
+                                        &window,
+                                    );
+                                    return;
+                                }
+                                if let Err(e) = archive.extract(&extract_dir) {
+                                    show_message_box(
+                                        format!("Failed to extract zip: {}", e),
+                                        &window,
+                                    );
+                                    return;
+                                }
+
+                                if let Ok(entries) = fs::read_dir(&extract_dir) {
+                                    let entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+                                    if entries.len() == 1 && entries[0].path().is_dir() {
+                                        let top = entries[0].path();
+                                        if let Ok(subs) = fs::read_dir(&top) {
+                                            for se in subs.filter_map(|e| e.ok()) {
+                                                let dest = extract_dir.join(se.file_name());
+                                                if let Err(e) = fs::rename(se.path(), &dest) {
+                                                    show_message_box(
+                                                        format!(
+                                                            "Failed moving {:?}: {}",
+                                                            se.path(),
+                                                            e
+                                                        ),
+                                                        &window,
+                                                    );
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        if let Err(e) = fs::remove_dir_all(&top) {
+                                            show_message_box(
+                                                format!("Failed removing folder {:?}: {}", top, e),
+                                                &window,
+                                            );
+                                            return;
+                                        }
+                                    }
+                                }
+
+                                let mut mod_ini_path = extract_dir.join("mod.ini");
+                                if !mod_ini_path.exists() {
+                                    if let Ok(entries) = fs::read_dir(&extract_dir) {
+                                        for entry in entries.flatten() {
+                                            let path = entry.path();
+                                            if path.is_dir() && path.join("mod.ini").exists() {
+                                                mod_ini_path = path.join("mod.ini");
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if !mod_ini_path.exists() {
+                                    show_message_box(
+                                        "Extracted zip does not contain a mod.ini".into(),
+                                        &window,
+                                    );
+                                    return;
+                                }
+
+                                let id = Uuid::new_v4().to_string();
+                                let mod_ini_str = mod_ini_path.to_string_lossy().replace("\\", "/");
+                                cfg.set("mods", &id, Some(format!("\"{}\"", mod_ini_str)));
+
+                                if let Some(ref path) = ini_path {
+                                    if let Err(e) = cfg.write(path) {
+                                        show_message_box(
+                                            format!("Failed to update INI: {}", e),
+                                            &window,
+                                        );
+                                    }
+                                }
+
+                                let title = fs::read_to_string(&mod_ini_path)
+                                    .ok()
+                                    .and_then(|txt| {
+                                        let mut m2 = Ini::new();
+                                        m2.read(txt).ok()?;
+                                        m2.get("desc", "title")
+                                    })
+                                    .map(|s| s.trim_matches('"').to_string())
+                                    .unwrap_or_else(|| "<NoTitle>".into());
+
+                                mods.push(ModEntry {
+                                    id: id.clone(),
+                                    path: mod_ini_str,
+                                    title,
+                                });
+                            }
+                        }
                     }
 
                     if ui.menu_item("About") {
@@ -313,7 +496,12 @@ fn main() {
                                 package.get("name").unwrap().as_str().unwrap()
                             ));
                             ui.text(format!("Version   : {}", package.get("version").unwrap()));
-                            ui.text(format!("Author    : {}", package.get("author").unwrap()));
+                            ui.text(format!(
+                                "Author    : {}",
+                                package.get("authors").unwrap().as_array().unwrap()[0]
+                                    .as_str()
+                                    .unwrap()
+                            ));
                             ui.text(format!("Platform  :  {}", sdl2::get_platform()));
                             ui.separator();
                             ui.text("OpenGL info");
@@ -327,7 +515,9 @@ fn main() {
                             ui.text(format!(
                                 "(C) {}, {}.",
                                 Utc::now().year(),
-                                package.get("author").unwrap()
+                                package.get("authors").unwrap().as_array().unwrap()[0]
+                                    .as_str()
+                                    .unwrap()
                             ))
                         });
                 }
