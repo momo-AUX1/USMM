@@ -84,8 +84,8 @@ fn main() {
         platform.prepare_frame(&mut ig, &window, &pump);
         ig.io_mut().config_flags |= ConfigFlags::NAV_ENABLE_KEYBOARD;
         let ui = ig.new_frame();
-        let GL_VESION = unsafe{renderer.gl_context().get_parameter_string(glow::VERSION)};
-        let mut renderer_gl = if GL_VESION.contains("OpenGL ES") { "GLES" } else { "GL" };
+        let gl_version = unsafe{renderer.gl_context().get_parameter_string(glow::VERSION)};
+        let renderer_gl = if gl_version.contains("OpenGL ES") { "GLES" } else { "GL" };
 
         let [w, h] = ui.io().display_size;
         ui.window("root")
@@ -258,7 +258,7 @@ fn main() {
                             ui.separator();
                             ui.text("OpenGL info");
                             ui.text(format!("Renderer  :  {}", renderer_gl));
-                            ui.text(format!("Version   :  {}", GL_VESION));
+                            ui.text(format!("Version   :  {}", gl_version));
                             ui.text(format!("Vendor    :  {}", unsafe {renderer.gl_context().get_parameter_string(glow::VENDOR)}));
                             ui.separator();
                             ui.text("Made with Rust, SDL2, ImGui & glow.");
