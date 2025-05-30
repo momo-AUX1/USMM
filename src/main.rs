@@ -12,8 +12,8 @@ use imgui_sdl2_support::SdlPlatform;
 use rfd::FileDialog;
 use sdl2::{event::Event, sys::exit as sdl_exit};
 
-use toml::Value;
 use chrono::{Datelike, Utc};
+use toml::Value;
 
 const CHEATS: &[&str] = &[
     "UseOfficialTitleOnTitleBar",
@@ -25,6 +25,15 @@ const CHEATS: &[&str] = &[
     "DisableBoostFilter",
     "DisableAutoSaveWarning",
     "HUDToggleKey",
+    "DisableDWMRoundedCorners",
+    "DisableDLCIcon",
+    "EnableObjectCollisionDebugView",
+    "EnableEventCollisionDebugView",
+    "EnableStageCollisionDebugView",
+    "EnableGIMipLevelDebugView",
+    "FixEggmanlandUsingEventGalleryTransition",
+    "DisableDPadMovement",
+    "HomingAttackOnJump",
 ];
 
 #[derive(Clone)]
@@ -34,13 +43,18 @@ struct ModEntry {
     title: String,
 }
 
+
+fn show_message_box(msg: String, window: &sdl2::video::Window){
+    _ = sdl2::messagebox::show_simple_message_box(sdl2::messagebox::MessageBoxFlag::INFORMATION, "Error", msg.as_str(), window);
+}
+
 fn main() {
     let mut ini_path: Option<String> = None;
     let mut cfg = Ini::new();
     let mut active = HashSet::<String>::new();
     let mut cheats = HashSet::<String>::new();
     let mut mods = Vec::<ModEntry>::new();
-    let mut show_about = false; 
+    let mut show_about = false;
 
     let raw_toml = fs::read_to_string("Cargo.toml").unwrap();
     let toml: Value = toml::from_str(&raw_toml).unwrap();
@@ -48,14 +62,23 @@ fn main() {
 
     let sdl = sdl2::init().unwrap();
     let video = sdl.video().unwrap();
+    #[cfg(feature = "gl_profile_gles")]
+    {
+        let a = video.gl_attr();
+        a.set_context_profile(sdl2::video::GLProfile::GLES);
+        a.set_context_version(3, 0);
+    }
+
+    #[cfg(feature = "gl_profile_opengl")]
     {
         let a = video.gl_attr();
         a.set_context_profile(sdl2::video::GLProfile::Core);
         a.set_context_version(4, 1);
     }
 
+
     let window = video
-        .window("UMSS", 1280, 720)
+        .window("USMM", 1280, 720)
         .opengl()
         .allow_highdpi()
         .resizable()
@@ -84,8 +107,12 @@ fn main() {
         platform.prepare_frame(&mut ig, &window, &pump);
         ig.io_mut().config_flags |= ConfigFlags::NAV_ENABLE_KEYBOARD;
         let ui = ig.new_frame();
-        let gl_version = unsafe{renderer.gl_context().get_parameter_string(glow::VERSION)};
-        let renderer_gl = if gl_version.contains("OpenGL ES") { "GLES" } else { "GL" };
+        let gl_version = unsafe { renderer.gl_context().get_parameter_string(glow::VERSION) };
+        let renderer_gl = if gl_version.contains("OpenGL ES") {
+            "GLES"
+        } else {
+            "GL"
+        };
 
         let [w, h] = ui.io().display_size;
         ui.window("root")
@@ -106,7 +133,18 @@ fn main() {
                             {
                                 let path = pb.to_string_lossy().into_owned();
                                 ini_path = Some(path.clone());
-                                cfg.read(fs::read_to_string(&path).unwrap()).unwrap();
+                                let ini_content = fs::read_to_string(&path);
+                                let ini_content = match ini_content {
+                                    Ok(content) => content,
+                                    Err(e) => {
+                                        show_message_box(format!("Error opening INI file: {}", e), &window);
+                                        return;
+                                    }
+                                };
+                                if let Err(e) = cfg.read(ini_content) {
+                                    show_message_box(format!("Error opening INI file: {}", e), &window);
+                                    return;
+                                }
 
                                 active.clear();
                                 if let Some(file) = cfg.get_map() {
@@ -129,9 +167,9 @@ fn main() {
                                     if let Some(codes) = file.get("codes") {
                                         for (_k, ov) in codes {
                                             if let Some(v) = ov.as_ref() {
-                                                let clean = v.trim_matches('"'); 
+                                                let clean = v.trim_matches('"');
                                                 if CHEATS.contains(&clean) {
-                                                    cheats.insert(clean.to_string()); 
+                                                    cheats.insert(clean.to_string());
                                                 }
                                             }
                                         }
@@ -251,7 +289,10 @@ fn main() {
                         .resizable(false)
                         .opened(&mut show_about)
                         .build(|| {
-                            ui.text("UMSS Mod-Manager");
+                            ui.text(format!(
+                                "{:?} Mod-Manager",
+                                package.get("name").unwrap().as_str().unwrap()
+                            ));
                             ui.text(format!("Version   : {}", package.get("version").unwrap()));
                             ui.text(format!("Author    : {}", package.get("author").unwrap()));
                             ui.text(format!("Platform  :  {}", sdl2::get_platform()));
@@ -259,10 +300,16 @@ fn main() {
                             ui.text("OpenGL info");
                             ui.text(format!("Renderer  :  {}", renderer_gl));
                             ui.text(format!("Version   :  {}", gl_version));
-                            ui.text(format!("Vendor    :  {}", unsafe {renderer.gl_context().get_parameter_string(glow::VENDOR)}));
+                            ui.text(format!("Vendor    :  {}", unsafe {
+                                renderer.gl_context().get_parameter_string(glow::VENDOR)
+                            }));
                             ui.separator();
                             ui.text("Made with Rust, SDL2, ImGui & glow.");
-                            ui.text(format!("(C) {}, {}.", Utc::now().year(), package.get("author").unwrap()))
+                            ui.text(format!(
+                                "(C) {}, {}.",
+                                Utc::now().year(),
+                                package.get("author").unwrap()
+                            ))
                         });
                 }
             });
