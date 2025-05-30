@@ -244,7 +244,11 @@ fn main() {
                                         Some(format!("\"{}\"", c)),
                                     );
                                 }
-                                cfg.write(path).unwrap();
+                                let cfg_write = cfg.write(path);
+                                if let Err(e) = cfg_write {
+                                    show_message_box(format!("Error saving INI file: {}", e), &window);
+                                    return;
+                                }
                             }
                         }
                     }
