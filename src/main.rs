@@ -60,8 +60,8 @@ fn main() {
     let mut mods = Vec::<ModEntry>::new();
     let mut show_about = false;
 
-    let raw_toml = fs::read_to_string("Cargo.toml").unwrap();
-    let toml: Value = toml::from_str(&raw_toml).unwrap();
+    const RAW_TOML: &str = include_str!("../Cargo.toml");
+    let toml: toml::Value = toml::from_str(RAW_TOML).unwrap();
     let package = toml.get("package").unwrap();
 
     let sdl = sdl2::init().unwrap();
