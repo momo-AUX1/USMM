@@ -261,34 +261,34 @@ fn main() {
                             }
                         }
 
+                        use std::io::{BufWriter, Write};
+
                         if ini_path.is_some() && ui.menu_item("Save") {
-                            if ini_path.is_none() {
-                                show_message_box("No INI loaded to save!".into(), &window);
-                            }
                             if let Some(ref path) = ini_path {
                                 if let Some(file) = cfg.get_map() {
                                     if let Some(main) = file.get("main") {
-                                        for k in main
+                                        for key in main
                                             .keys()
-                                            .filter(|k| k.starts_with("activemod"))
+                                            .filter(|k| {
+                                                k.starts_with("activemod") || *k == "activemodcount"
+                                            })
                                             .cloned()
                                             .collect::<Vec<_>>()
                                         {
-                                            cfg.remove_key("main", &k);
+                                            cfg.remove_key("main", &key);
                                         }
                                     }
                                     if let Some(codes) = file.get("codes") {
-                                        for k in codes
+                                        for key in codes
                                             .keys()
-                                            .filter(|k| k.starts_with("code"))
+                                            .filter(|k| k.starts_with("code") || *k == "codecount")
                                             .cloned()
                                             .collect::<Vec<_>>()
                                         {
-                                            cfg.remove_key("codes", &k);
+                                            cfg.remove_key("codes", &key);
                                         }
                                     }
                                 }
-
                                 cfg.set("main", "activemodcount", Some(active.len().to_string()));
                                 for (i, id) in active.iter().enumerate() {
                                     cfg.set(
@@ -305,13 +305,30 @@ fn main() {
                                         Some(format!("\"{}\"", c)),
                                     );
                                 }
-                                let cfg_write = cfg.write(path);
-                                if let Err(e) = cfg_write {
-                                    show_message_box(
-                                        format!("Error saving INI file: {}", e),
-                                        &window,
-                                    );
-                                    return;
+
+                                match File::create(path) {
+                                    Ok(f) => {
+                                        let mut buf = BufWriter::new(f);
+                                        let map = cfg.get_map().unwrap();
+
+                                        for section in &["main", "mods", "codes"] {
+                                            if let Some(sec_map) = map.get(*section) {
+                                                writeln!(buf, "[{}]", section).unwrap();
+                                                for (k, v_opt) in sec_map {
+                                                    if let Some(v) = v_opt {
+                                                        writeln!(buf, "{}={}", k, v).unwrap();
+                                                    }
+                                                }
+                                                writeln!(buf).unwrap();
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        show_message_box(
+                                            format!("Failed opening INI for write: {}", e),
+                                            &window,
+                                        );
+                                    }
                                 }
                             }
                         }
