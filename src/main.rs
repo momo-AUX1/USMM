@@ -1,3 +1,5 @@
+// i wish python could build dlls man...
+
 extern crate sdl2;
 
 use std::{collections::HashSet, fs};
@@ -18,6 +20,7 @@ use toml::Value;
 use std::fs::File;
 use uuid::Uuid;
 use zip::ZipArchive;
+use std::io::{BufWriter, Write};
 
 const CHEATS: &[&str] = &[
     "UseOfficialTitleOnTitleBar",
@@ -261,8 +264,6 @@ fn main() {
                             }
                         }
 
-                        use std::io::{BufWriter, Write};
-
                         if ini_path.is_some() && ui.menu_item("Save") {
                             if let Some(ref path) = ini_path {
                                 if let Some(file) = cfg.get_map() {
@@ -289,6 +290,7 @@ fn main() {
                                         }
                                     }
                                 }
+
                                 cfg.set("main", "activemodcount", Some(active.len().to_string()));
                                 for (i, id) in active.iter().enumerate() {
                                     cfg.set(
@@ -311,10 +313,14 @@ fn main() {
                                         let mut buf = BufWriter::new(f);
                                         let map = cfg.get_map().unwrap();
 
-                                        for section in &["Main", "Mods", "Codes"] {
-                                            if let Some(sec_map) = map.get(*section) {
-                                                writeln!(buf, "[{}]", section).unwrap();
-                                                for (k, v_opt) in sec_map {
+                                        for &(key, header) in &[
+                                            ("main", "Main"),
+                                            ("mods", "Mods"),
+                                            ("codes", "Codes"),
+                                        ] {
+                                            if let Some(sec) = map.get(key) {
+                                                writeln!(buf, "[{}]", header).unwrap();
+                                                for (k, v_opt) in sec {
                                                     if let Some(v) = v_opt {
                                                         writeln!(buf, "{}={}", k, v).unwrap();
                                                     }
